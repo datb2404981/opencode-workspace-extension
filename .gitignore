@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+*.log
+*.bak
+*.backup-*
+.env
+.env.*
+!.env.example
+OpenCodeFilePicker.app/
