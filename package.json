@@ -1,10 +1,14 @@
 {
   "name": "opencode-project-workspace-local",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Workspace navigation, attachment picker, context freshness and tool guards for OpenCode 2.2.5",
   "license": "MIT",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test code-freshness.test.ts tool-loop-guard.test.ts",
+    "bench": "node scripts/bench-context.mjs"
+  },
   "exports": {
     ".": "./workspace-server.ts",
     "./tui": "./workspace-tui.ts"

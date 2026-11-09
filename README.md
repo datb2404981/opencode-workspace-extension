@@ -12,7 +12,7 @@ Extension cho **OpenCode 2.2.5** hỗ trợ chọn dự án, đính kèm tệp/t
 | Đính kèm tệp | `/tep`, `Ctrl+Option+A`, chọn nhiều tệp và kéo thả đường dẫn vào terminal |
 | Đính kèm thư mục | `/thu-muc`, gửi sơ đồ thư mục trước; đọc file cụ thể khi cần |
 | Giới hạn truy cập | Kiểm tra workspace, folder tham khảo, symlink và đường dẫn nhạy cảm trước khi chạy công cụ |
-| Tối ưu context | Lập bản đồ cấu trúc dự án có cache, nhận diện tệp đang được hỏi và không nạp lại đoạn mã giống hệt |
+| Tối ưu context | Lập bản đồ cấu trúc dự án có cache, nhận diện tối đa ba tệp theo đường dẫn Unicode/tên có dấu cách, giữ giới hạn tổng lượng source, bỏ bản đồ dự án dư thừa khi đã có source được kiểm tra và chỉ nạp lại tệp thực sự thay đổi sau khi sửa |
 | Chống gọi tool lặp | Dừng các lần đọc y hệt hoặc lỗi công cụ lặp lại quá ngưỡng trong một lượt |
 | Skill và giao diện TUI | Menu skill, các phím tắt thao tác ô nhập, thông tin phiên và chuẩn hóa Markdown |
 
@@ -23,6 +23,7 @@ Extension giữ nguyên cấu hình model và các agent đã thiết lập. Cá
 - **macOS** để sử dụng toàn bộ tính năng chọn tệp bằng Finder. Bộ chọn tệp được biên dịch từ `FilePicker.swift` trong lúc cài, không yêu cầu tải binary từ bên thứ ba.
 - **OpenCode v2.2.5** tương thích với API `@opencode/plugin` và `@opencode/plugin/tui` được sử dụng trong source.
 - `git`, `python3`, và **Xcode Command Line Tools** (cung cấp `xcrun swiftc`).
+- **Node.js 24+** nếu muốn chạy bộ unit test và benchmark trực tiếp từ mã nguồn.
 - Một file cấu hình `opencode.json`. Installer có thể tạo file mới nếu chưa có.
 
 Cài công cụ biên dịch Swift trên macOS khi cần:
@@ -66,6 +67,14 @@ bash scripts/install.sh
 
 Kiểm tra đúng file cấu hình bằng cách xem `OPENCODE_CONFIG` của launcher, nếu bạn đang dùng launcher tùy biến. Installer không chỉnh các launcher hoặc biến môi trường khác.
 
+Chạy kiểm tra chỉ đọc để biết file cấu hình đang dùng đã đăng ký extension hay chưa, đồng thời phát hiện một số launcher ghi đè compaction/LSP:
+
+```bash
+python3 scripts/doctor.py
+# Hoặc chỉ định đúng file cấu hình
+python3 scripts/doctor.py --config "$HOME/.opencode/opencode.json"
+```
+
 ### Cài thủ công
 
 Bạn có thể tự đặt các tệp TypeScript và `package.json` trong một thư mục rồi biên dịch helper từ source:
@@ -100,8 +109,18 @@ Lệnh tương đương `/attach` cho tệp và `/ky-nang` cho danh sách skill 
 Chạy các bài kiểm tra tập trung trong thư mục repo:
 
 ```bash
-node --test tool-loop-guard.test.ts code-freshness.test.ts
+npm test
 ```
+
+Đo riêng độ trễ nạp context và lập bản đồ dự án mà không gọi model:
+
+```bash
+npm run bench
+```
+
+Kết quả gồm p50/p95 của một tệp, ba tệp và project map khi cache lạnh/nóng. Kết quả này **không đo** token generation hoặc độ trễ phản hồi end-to-end của model. So sánh trên cùng máy, Node.js, tải nền và bộ tác vụ trước khi kết luận cải tiến hiệu năng.
+
+GitHub Actions chạy các bài kiểm tra đơn vị và kiểm tra cú pháp bộ cài trên mỗi push/PR. Bộ benchmark là phép đo thủ công để tránh đưa ngưỡng thời gian thiếu ổn định vào CI.
 
 Kiểm tra bản helper đã biên dịch:
 

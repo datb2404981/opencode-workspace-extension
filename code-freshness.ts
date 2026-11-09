@@ -9,22 +9,40 @@ type Seen = { version: string; focus: number }
 type Turn = { number: number; text: string; refs: string[]; attached: string[]; result?: string }
 type State = { root?: string; active: string[]; turn: Turn; seen: Map<string, Seen> }
 
-const MAX_FILES_PER_TURN = 2
+const MAX_FILES_PER_TURN = 3
 const MAX_FILE_BYTES = 512 * 1024
 const MAX_EXCERPT_LINES = 65
 const MAX_EXCERPT_CHARS = 4500
+const MAX_EXCERPT_CHARS_PER_TURN = 9000
 const MAX_SESSIONS = 40
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?|vue|svelte|py|go|rs|java|cs|php|rb)$/i
-const PATH_REFERENCE = /(?:^|[\s@`'"([{])(@?(?:[\w.\-]+\/)*[\w.\-]+\.(?:[cm]?[jt]sx?|vue|svelte|py|go|rs|java|cs|php|rb))(?=$|[\s`'"\])},;:!?])/gim
+const PATH_REFERENCE = /(?:^|[\s@`'"([{])(@?(?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:[cm]?[jt]sx?|vue|svelte|py|go|rs|java|cs|php|rb))(?=$|[\s`'"\])},;:!?])/gimu
+const QUOTED_PATH = /([`'"])(@?[^`'"\r\n]{1,240})\1/g
 const DECLARATION = /^\s*(?:(?:export|declare|default|async|public|private|protected|static)\s+)*(?:const|let|function|class|interface|type|enum|def|async\s+def)\s+([\w$]+)/
 
 function references(prompt: Prompt): string[] {
   const found: string[] = []
+  const text = prompt.text ?? ''
   for (const file of prompt.files ?? []) {
     if (!file.uri?.startsWith('file:')) continue
     try { found.push(fileURLToPath(file.uri)) } catch { /* Ignore malformed attachment URIs. */ }
   }
-  for (const match of (prompt.text ?? '').matchAll(PATH_REFERENCE)) found.push(match[1].replace(/^@/, ''))
+  const quotedRanges: { start: number; end: number }[] = []
+  const mentioned: { at: number; file: string }[] = []
+  for (const match of text.matchAll(QUOTED_PATH)) {
+    const file = match[2].trim().replace(/^@/, '')
+    if (!SOURCE_EXTENSION.test(file)) continue
+    const start = match.index ?? 0
+    quotedRanges.push({ start, end: start + match[0].length })
+    mentioned.push({ at: start, file })
+  }
+  for (const match of text.matchAll(PATH_REFERENCE)) {
+    const at = (match.index ?? 0) + match[0].indexOf(match[1])
+    if (quotedRanges.some(range => at >= range.start && at < range.end)) continue
+    mentioned.push({ at, file: match[1].replace(/^@/, '') })
+  }
+  mentioned.sort((a, b) => a.at - b.at)
+  found.push(...mentioned.map(item => item.file))
   return [...new Set(found.filter(file => SOURCE_EXTENSION.test(file)))].slice(0, MAX_FILES_PER_TURN)
 }
 
@@ -55,13 +73,13 @@ function focusLine(lines: string[], prompt: string): number {
   return matches[0]?.index ?? 0
 }
 
-function excerpt(lines: string[], index: number): string {
+function excerpt(lines: string[], index: number, maxChars: number): string {
   const first = Math.max(0, index - 3)
   const last = Math.min(lines.length, index + MAX_EXCERPT_LINES)
   let text = ''
   for (let n = first; n < last; n++) {
     const candidate = `${n + 1}: ${lines[n]}\n`
-    if (text.length + candidate.length > MAX_EXCERPT_CHARS) {
+    if (text.length + candidate.length > maxChars) {
       text += '[Excerpt truncated. Use read_focus or read for more.]\n'
       break
     }
@@ -104,6 +122,7 @@ export function createCodeFreshness() {
 
       const output: string[] = []
       const inspected = new Set<string>()
+      const maxExcerptChars = Math.min(MAX_EXCERPT_CHARS, Math.floor(MAX_EXCERPT_CHARS_PER_TURN / state.turn.refs.length))
       for (const requested of state.turn.refs) {
         try {
           const full = await checkedReadPath(workspace, path.resolve(workspace, requested), folders)
@@ -138,7 +157,7 @@ export function createCodeFreshness() {
             output.push(`[${label}] Saved source rechecked on disk, unchanged since previous excerpt in this chat.`)
             continue
           }
-          output.push(`[${label}] Fresh saved source, ${lines.length} lines.\n${excerpt(lines, focus)}`)
+          output.push(`[${label}] Fresh saved source, ${lines.length} lines.\n${excerpt(lines, focus, maxExcerptChars)}`)
           state.seen.set(full, { version, focus })
         } catch {
           // The model can still discover files through the usual scoped tools.
@@ -153,6 +172,11 @@ export function createCodeFreshness() {
     clear(sessionID: string) {
       const state = sessions.get(sessionID)
       if (state) { state.seen.clear(); state.turn.result = undefined }
+    },
+
+    invalidate(sessionID: string) {
+      const state = sessions.get(sessionID)
+      if (state) state.turn.result = undefined
     },
 
     dispose() { sessions.clear(); sources.clear() },

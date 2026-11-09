@@ -77,3 +77,54 @@ test('does not include files through symlinks outside the project', async () => 
   assert.equal(await guard.context('chat', root), undefined)
   guard.dispose()
 }))
+
+test('recognizes three Unicode and quoted spaced paths without extra excerpts', async () => fixture(async (root) => {
+  const files = [
+    ['src/ĐăngNhập.vue', 'export const loginScreen = true'],
+    ['src/My View.vue', 'export const spacedView = true'],
+    ['src/utils/接続.ts', 'export const connection = true'],
+  ]
+  for (const [relative, source] of files) {
+    const filename = path.join(root, relative)
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, source + '\n' + '// padding context\n'.repeat(160))
+  }
+
+  const guard = createCodeFreshness()
+  guard.track('chat', { text: 'kiểm tra @src/ĐăngNhập.vue, `src/My View.vue` và "src/utils/接続.ts"' })
+  const context = (await guard.context('chat', root))!
+  for (const [, source] of files) assert.match(context, new RegExp(source))
+  assert.equal(context.match(/Fresh saved source/g)?.length, 3)
+  assert.ok(context.length < 10_000)
+  guard.dispose()
+}))
+
+test('rechecks changed source after a successful edit invalidates the current turn', async () => fixture(async (root, file) => {
+  const guard = createCodeFreshness()
+  guard.track('chat', { text: '@src/record.service.ts getRecord' })
+  assert.match((await guard.context('chat', root))!, /return 1/)
+
+  await writeFile(file, 'export const getRecord = () => 99\n')
+  guard.invalidate('chat')
+  const updated = (await guard.context('chat', root))!
+  assert.match(updated, /getRecord = \(\) => 99/)
+  assert.doesNotMatch(updated, /return 1/)
+  guard.dispose()
+}))
+
+test('an edit only re-injects modified source, preserving previously seen unchanged files', async () => fixture(async (root, file) => {
+  const other = path.join(root, 'src', 'untouched.ts')
+  await writeFile(other, 'export const untouchedValue = 123\n')
+  const guard = createCodeFreshness()
+  guard.track('chat', { text: '@src/record.service.ts và @src/untouched.ts' })
+  assert.equal((await guard.context('chat', root))!.match(/Fresh saved source/g)?.length, 2)
+
+  await writeFile(file, 'export const getRecord = () => 99\n')
+  guard.invalidate('chat')
+  const updated = (await guard.context('chat', root))!
+  assert.match(updated, /getRecord = \(\) => 99/)
+  assert.equal(updated.match(/Fresh saved source/g)?.length, 1)
+  assert.match(updated, /untouched\.ts\] Saved source rechecked on disk, unchanged/)
+  assert.doesNotMatch(updated, /untouchedValue = 123/)
+  guard.dispose()
+}))

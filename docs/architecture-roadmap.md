@@ -2,6 +2,17 @@
 
 Ngày rà soát: 10/11/2026. Phạm vi gồm extension được sao chép vào repository này, OpenCode v2.2.5 và những thiết lập chạy đã kiểm tra trên máy phát triển. So sánh với **harness** của Claude Code và Codex dựa trên tài liệu công khai. Các phần bên trong sản phẩm đóng mã nguồn của Claude Code không được coi là thông tin đã xác minh.
 
+### Tiến độ sau bản 1.9.1
+
+| Hạng mục | Đã kiểm tra | Còn cần xác minh |
+| --- | --- | --- |
+| Đăng ký plugin | Đã cài vào cấu hình CLI `~/.opencode/opencode.json` và `opencode.bin plugin list --standalone` có hiển thị extension. Có lệnh `doctor.py` chỉ đọc để kiểm tra cấu hình. | Kiểm tra toàn bộ hook trong phiên TUI mới, riêng launcher VS Code và những cấu hình runtime ghi đè. |
+| Nạp mã nguồn | Nhận diện tối đa ba tệp có tên Unicode hoặc dấu cách, giới hạn source theo lượt, bỏ project map khi đã có nội dung file và giữ lại phần đã đọc của file không thay đổi sau edit. | Đo số token/prefill và tính đúng đắn trên dự án thực tế. |
+| Kiểm định | 11 bài unit test và cú pháp installer/doctor đã đạt; `npm run bench` đo p50/p95 I/O không gọi model, CI kiểm tra push/PR. | Chưa có benchmark A/B về TTFT và thời gian hoàn thành yêu cầu với cùng model local. |
+| Chính sách launcher | Đã phát hiện compaction tự động và LSP bị wrapper vô hiệu hóa. | Chưa tự thay đổi wrapper để tránh tác động ngầm đến độ trễ, RAM hoặc workflow đang chạy. |
+
+Bảng hiện trạng và backlog bên dưới là đánh giá ban đầu trước các sửa đổi 1.9.1; dùng bảng tiến độ này khi xác định mục đã hoàn thành.
+
 ## 1. Kết quả kiểm tra hiện trạng
 
 | Thành phần | Quan sát xác thực | Ý nghĩa |
